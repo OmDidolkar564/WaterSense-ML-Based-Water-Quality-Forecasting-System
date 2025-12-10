@@ -62,7 +62,7 @@ export default function ForecastPage() {
     const [error, setError] = useState<string | null>(null);
 
     const LIMIT = 20;
-    const API_URL = process.env.NODE_ENV === 'production' ? '' : 'http://localhost:8000';
+    const API_URL = '';
 
     // Fetch summary stats
     useEffect(() => {
