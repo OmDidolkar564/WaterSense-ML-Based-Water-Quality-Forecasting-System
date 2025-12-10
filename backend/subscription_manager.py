@@ -64,7 +64,7 @@ def add_subscription(email: str, location: str, sub_type: str = 'district') -> b
             return True
         except Exception as e:
             print(f"⚠️ Supabase insert error: {e}")
-            return False
+            # Fall through to JSON fallback
 
     # Fallback to JSON
     subs = _load_subs()
