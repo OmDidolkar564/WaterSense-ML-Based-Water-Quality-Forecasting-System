@@ -1,0 +1,30 @@
+# Dependencies
+node_modules/
+venv/
+__pycache__/
+
+# Next.js
+.next/
+out/
+build/
+
+# Environment Variables (Security!)
+.env
+.env.local
+.env.production
+.env.development
+
+# Deployment Folders
+.vercel/
+hf_deployment_temp/
+
+# Large Files & Local DBs
+*.pkl
+*.zip
+*.db
+*.sqlite3
+backend/enhanced_models.pkl
+
+# IDEs
+.vscode/
+.idea/
