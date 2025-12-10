@@ -61,7 +61,7 @@ export default function SubscriptionModal({
                 setStatus('error');
                 setMessage(data.detail || 'Failed to subscribe');
             }
-        } catch (error) {
+        } catch {
             setStatus('error');
             setMessage('Network error. Please try again.');
         }
