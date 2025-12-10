@@ -19,7 +19,14 @@ const nextConfig: NextConfig = {
     unoptimized: true,
   },
 
-
+  async rewrites() {
+    return [
+      {
+        source: '/api/:path*',
+        destination: 'https://omdidolkar-groundwater-backend.hf.space/api/:path*',
+      },
+    ];
+  },
 };
 
 export default nextConfig;
