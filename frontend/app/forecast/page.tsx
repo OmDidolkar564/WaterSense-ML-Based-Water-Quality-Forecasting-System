@@ -21,7 +21,7 @@ import {
     MenuItem,
     Button,
 } from '@mui/material';
-import { Add } from '@mui/icons-material';
+import { Add, Timeline } from '@mui/icons-material';
 
 interface ForecastData {
     well_id: string;
@@ -148,19 +148,21 @@ export default function ForecastPage() {
         <Container maxWidth="lg" sx={{ py: 4 }}>
             {/* Header */}
             <Box sx={{ mb: 4, textAlign: 'center' }}>
-                <Typography
-                    variant="h3"
-                    sx={{
-                        fontWeight: 700,
-                        mb: 1,
-                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                        backgroundClip: 'text',
-                        WebkitBackgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent',
-                    }}
-                >
-                    📈 Model Validation (2022)
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1, gap: 2 }}>
+                    <Timeline sx={{ fontSize: 40, color: '#764ba2' }} />
+                    <Typography
+                        variant="h3"
+                        sx={{
+                            fontWeight: 700,
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            backgroundClip: 'text',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                        }}
+                    >
+                        Model Validation (2022)
+                    </Typography>
+                </Box>
                 <Typography variant="subtitle1" sx={{ color: '#666' }}>
                     Actual vs Predicted water quality parameters
                 </Typography>
