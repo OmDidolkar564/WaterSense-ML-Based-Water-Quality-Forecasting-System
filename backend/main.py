@@ -58,14 +58,15 @@ app.add_middleware(
 
 try:
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    predictions_path = os.path.join(current_dir, 'enhanced_predictions.csv')
+    predictions_path = os.path.join(current_dir, 'enhanced_predictions.csv.gz')
     
     if os.path.exists(predictions_path):
-        # Use robust reading
+        # Use robust reading with gzip compression
         predictions_df = pd.read_csv(
             predictions_path, 
             encoding='utf-8', 
-            on_bad_lines='skip'
+            on_bad_lines='skip',
+            compression='gzip'
         )
         
         # Ensure year is int
