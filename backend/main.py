@@ -512,10 +512,11 @@ async def get_district_data(
 
 @app.post("/api/subscribe")
 async def subscribe_user(request: SubscriptionRequest):
-    success = add_subscription(request.email, request.location, request.type)
+    success, msg = add_subscription(request.email, request.location, request.type)
     if not success:
-         raise HTTPException(status_code=400, detail="Already subscribed or invalid data")
-    return {"message": f"Subscribed {request.email}"}
+         print(f"Subscription failed: {msg}")
+         raise HTTPException(status_code=400, detail=msg)
+    return {"message": msg}
 
 @app.post("/api/trigger-alert")
 async def trigger_manual_alert(request: TriggerRequest):

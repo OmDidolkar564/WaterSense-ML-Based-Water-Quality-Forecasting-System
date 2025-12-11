@@ -36,10 +36,10 @@ def _save_subs(subs: List[Dict]):
     except Exception as e:
         print(f"Error saving subscriptions: {e}")
 
-def add_subscription(email: str, location: str, sub_type: str = 'district') -> bool:
+def add_subscription(email: str, location: str, sub_type: str = 'district') -> tuple[bool, str]:
     """
     Add a new subscription. 
-    Returns True if added, False if already exists.
+    Returns (Success, Message).
     """
     client = get_supabase_client()
     
@@ -53,7 +53,7 @@ def add_subscription(email: str, location: str, sub_type: str = 'district') -> b
             # Check existing
             res = client.table('subscriptions').select("*").eq('email', email).eq('location', location).eq('type', sub_type).execute()
             if res.data:
-                return False
+                return False, f"Email {email} is already subscribed to {location}."
             
             # Insert
             client.table('subscriptions').insert({
@@ -61,10 +61,11 @@ def add_subscription(email: str, location: str, sub_type: str = 'district') -> b
                 'location': location,
                 'type': sub_type
             }).execute()
-            return True
+            return True, "Subscribed successfully (saved to Database)."
         except Exception as e:
             print(f"⚠️ Supabase insert error: {e}")
             # Fall through to JSON fallback
+            pass # Continue to JSON
 
     # Fallback to JSON
     subs = _load_subs()
@@ -74,7 +75,7 @@ def add_subscription(email: str, location: str, sub_type: str = 'district') -> b
         if (sub.get('email') == email and 
             existing_loc.lower() == location.lower() and 
             existing_type == sub_type):
-            return False 
+            return False, f"Email {email} is already subscribed (local)."
     
     subs.append({
         'email': email,
@@ -83,7 +84,7 @@ def add_subscription(email: str, location: str, sub_type: str = 'district') -> b
         'created_at': "new"
     })
     _save_subs(subs)
-    return True
+    return True, "Subscribed successfully (saved to local file)."
 
 def get_subscribers_for_location(location: str, sub_type: str = 'district') -> List[Dict]:
     """Get all subscribers for a specific location and type"""
