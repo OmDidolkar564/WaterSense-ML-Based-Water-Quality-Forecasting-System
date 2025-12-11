@@ -1,0 +1,14 @@
+{
+    "functions": {
+        "backend/main.py": {
+            "runtime": "python3.9",
+            "includeFiles": "backend/**"
+        }
+    },
+    "rewrites": [
+        {
+            "source": "/api/:path*",
+            "destination": "/backend/main.py"
+        }
+    ]
+}
