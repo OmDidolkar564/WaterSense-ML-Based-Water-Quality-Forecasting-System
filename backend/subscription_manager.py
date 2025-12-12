@@ -36,7 +36,7 @@ def _save_subs(subs: List[Dict]):
     except Exception as e:
         print(f"Error saving subscriptions: {e}")
 
-def add_subscription(email: str, location: str, sub_type: str = 'district') -> tuple[bool, str]:
+def handle_new_subscription(email: str, location: str, sub_type: str = 'district') -> tuple[bool, str]:
     """
     Add a new subscription. 
     Returns (Success, Message).

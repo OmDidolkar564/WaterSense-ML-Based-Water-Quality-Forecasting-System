@@ -22,7 +22,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 # Internal Modules (Ensure these exist or comment out if not needed for this step)
 try:
     from email_service import send_alert_email
-    from subscription_manager import add_subscription, get_subscribers_for_location, get_all_subscriptions
+    from subscription_manager import handle_new_subscription, get_subscribers_for_location, get_all_subscriptions
     from alert_engine import check_and_send_alerts
 except ImportError:
     # Dummy imports if not present, to prevent crash during this refactor
@@ -522,7 +522,7 @@ async def get_district_data(
 @app.post("/api/subscribe")
 async def subscribe_user(request: SubscriptionRequest):
     try:
-        success, msg = add_subscription(request.email, request.location, request.type)
+        success, msg = handle_new_subscription(request.email, request.location, request.type)
         if not success:
              print(f"Subscription failed: {msg}")
              raise HTTPException(status_code=400, detail=msg)
