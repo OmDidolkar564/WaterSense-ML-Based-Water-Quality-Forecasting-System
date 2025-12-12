@@ -297,6 +297,14 @@ async def root():
         "status": "operational"
     }
 
+@app.get("/api/version")
+async def get_version():
+    return {
+        "version": "2.1.0",
+        "deployed_at": "2025-12-12 11:30:00 UTC",
+        "status": "Deployment Check"
+    }
+
 @app.get("/api/health")
 async def health_check():
     return {
