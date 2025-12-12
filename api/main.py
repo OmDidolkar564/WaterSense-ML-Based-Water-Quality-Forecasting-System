@@ -20,18 +20,9 @@ import atexit
 from apscheduler.schedulers.background import BackgroundScheduler
 
 # Internal Modules (Ensure these exist or comment out if not needed for this step)
-try:
-    from email_service import send_alert_email
-    from subscription_manager import handle_new_subscription, get_subscribers_for_location, get_all_subscriptions
-    from alert_engine import check_and_send_alerts
-except ImportError:
-    # Dummy imports if not present, to prevent crash during this refactor
-    print("⚠️ Warning: Email/Subscription modules not found. Mocking them.")
-    def send_alert_email(*args, **kwargs): return True
-    def add_subscription(*args, **kwargs): return True
-    def get_subscribers_for_location(*args, **kwargs): return []
-    def get_all_subscriptions(*args, **kwargs): return []
-    def check_and_send_alerts(*args, **kwargs): pass
+from email_service import send_alert_email
+from subscription_manager import handle_new_subscription, get_subscribers_for_location, get_all_subscriptions
+from alert_engine import check_and_send_alerts
 
 # Suppress warnings
 warnings.filterwarnings('ignore')
