@@ -14,7 +14,7 @@ import {
     Select,
     MenuItem,
 } from '@mui/material';
-import { Timeline, TrendingUp } from '@mui/icons-material';
+import { TrendingUp } from '@mui/icons-material';
 import {
     LineChart,
     Line,
@@ -89,7 +89,7 @@ export default function ForecastPage() {
 
         setLoadingData(true);
         setError(null);
-        
+
         fetch(`/api/forecast/${selectedDistrict}`)
             .then(async (res) => {
                 if (!res.ok) {
@@ -100,7 +100,7 @@ export default function ForecastPage() {
             })
             .then((data: ForecastResponse) => {
                 // Ensure years are sorted
-                const sorted = data.forecast_data.sort((a, b) => a.Year - b.Year); 
+                const sorted = data.forecast_data.sort((a, b) => a.Year - b.Year);
                 setForecastData(sorted);
                 setLoadingData(false);
             })
@@ -215,7 +215,7 @@ export default function ForecastPage() {
                                     <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
                                     <XAxis dataKey="year" />
                                     <YAxis domain={[0, 'auto']} label={{ value: 'WQI', angle: -90, position: 'insideLeft' }} />
-                                    <Tooltip 
+                                    <Tooltip
                                         contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
                                     />
                                     <Legend />

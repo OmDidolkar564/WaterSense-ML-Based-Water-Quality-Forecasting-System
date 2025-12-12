@@ -79,7 +79,7 @@ export default function DistrictPage() {
   const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://omdidolkar-groundwater-backend.hf.space';
 
   // Helper function to safely format numbers
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   const formatNumber = (value: any, decimals: number = 2): string => {
     if (value === null || value === undefined || value === '' || value === 'BDL' || value === 'Nil') return '-';
     const num = typeof value === 'number' ? value : Number(value);
@@ -97,7 +97,7 @@ export default function DistrictPage() {
         if (result.years && result.years.length > 0) {
           setSelectedYear(result.years[0]);
         }
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
       } catch (err: any) {
         console.error('Error fetching years:', err);
       }
@@ -109,7 +109,7 @@ export default function DistrictPage() {
   // Fetch data when year changes
   useEffect(() => {
     fetchData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [selectedYear]);
 
   const fetchData = async () => {
@@ -135,7 +135,7 @@ export default function DistrictPage() {
       setData(result.data || []);
       setTotalRecords(result.total_records || 0);
       setOffset(LIMIT);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     } catch (err: any) {
       setFetchError(err.message);
       console.error('Error fetching data:', err);
@@ -162,7 +162,7 @@ export default function DistrictPage() {
 
       setData((prev) => [...prev, ...(result.data || [])]);
       setOffset((prev) => prev + LIMIT);
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
     } catch (err: any) {
       console.error('Error loading more:', err);
     } finally {
