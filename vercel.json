@@ -1,13 +1,8 @@
 {
-    "functions": {
-        "backend/main.py": {
-            "includeFiles": "backend/**"
-        }
-    },
     "rewrites": [
         {
-            "source": "/api/:path*",
-            "destination": "/backend/main.py"
+            "source": "/api/(.*)",
+            "destination": "/api/index.py"
         }
     ]
 }
