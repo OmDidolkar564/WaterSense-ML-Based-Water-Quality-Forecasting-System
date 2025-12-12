@@ -59,9 +59,12 @@ export default function ForecastPage() {
     const [loadingData, setLoadingData] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
+    // Use Direct API URL to avoid Proxy/Rewrite issues
+    const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://omdidolkar-groundwater-backend.hf.space';
+
     // Fetch Locations on Mount
     useEffect(() => {
-        fetch('/api/locations')
+        fetch(`${API_URL}/api/locations`)
             .then(res => res.json())
             .then(data => {
                 setLocations(data);
@@ -90,7 +93,9 @@ export default function ForecastPage() {
         setLoadingData(true);
         setError(null);
 
-        fetch(`/api/forecast/${selectedDistrict}`)
+        setError(null);
+
+        fetch(`${API_URL}/api/forecast/${selectedDistrict}`)
             .then(async (res) => {
                 if (!res.ok) {
                     const err = await res.json();

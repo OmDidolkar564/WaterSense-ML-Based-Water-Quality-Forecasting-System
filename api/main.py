@@ -129,7 +129,6 @@ class WaterQualityInput(BaseModel):
     SO4: float = Field(..., ge=0)
     NO3: float = Field(..., ge=0)
     F: float = Field(..., ge=0)
-    # Optional context (not used for calculation but good for logging)
     year: Optional[int] = Field(2024)
     latitude: Optional[float] = Field(20.5937)
     longitude: Optional[float] = Field(78.9629)
@@ -148,6 +147,20 @@ class PredictionResponse(BaseModel):
     safe_for_use: bool
     recommendations: List[str]
     parameter_status: Dict[str, str]
+
+@app.get("/api/health")
+async def health_check():
+    """Debug endpoint to check if data is loaded"""
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "data_loaded": not predictions_df.empty,
+        "rows_predictions": len(predictions_df),
+        "forecast_loaded": not forecast_df.empty,
+        "rows_forecast": len(forecast_df),
+        "models_loaded": list(trained_models.keys()) if trained_models else [],
+        "env": os.environ.get('space_id', 'local')
+    }
 
 class StatsResponse(BaseModel):
     total_samples: int
@@ -404,11 +417,11 @@ async def predict_water_quality(data: WaterQualityInput):
             pass
 
     return PredictionResponse(
-        predicted_tds=float(data.TDS),
-        wqi=float(wqi),
+        predicted_tds=float(data.TDS) if pd.notnull(data.TDS) else 0.0,
+        wqi=float(wqi) if pd.notnull(wqi) and not np.isinf(wqi) else 0.0,
         risk_category=risk_category,
-        potable=potable,
-        safe_for_use=safe_for_use,
+        potable=bool(potable),
+        safe_for_use=bool(safe_for_use),
         recommendations=get_recommendations(params, wqi),
         parameter_status=check_parameter_status(params)
     )
@@ -454,7 +467,7 @@ async def get_district_risks(limit: int = 20, sort_by: str = "risk_score"):
         # Sort and limit
         district_data = district_data.sort_values(sort_by, ascending=False).head(limit)
         
-        return district_data.to_dict('records')
+        return district_data.replace([np.inf, -np.inf], np.nan).where(pd.notnull(district_data), None).to_dict('records')
         
     except Exception as e:
         print(f"Error in district risks: {e}")
@@ -473,10 +486,10 @@ async def get_temporal_trends():
         return [
             TemporalTrend(
                 year=int(row['Year']),
-                avg_wqi=float(row['WQI']),
-                avg_tds=float(row['TDS']),
-                avg_no3=float(row['NO3']),
-                avg_f=float(row['F'])
+                avg_wqi=row['WQI'] if pd.notnull(row['WQI']) else 0.0,
+                avg_tds=row['TDS'] if pd.notnull(row['TDS']) else 0.0,
+                avg_no3=row['NO3'] if pd.notnull(row['NO3']) else 0.0,
+                avg_f=row['F'] if pd.notnull(row['F']) else 0.0
             ) for _, row in yearly.iterrows()
         ]
     except Exception as e:
@@ -553,7 +566,21 @@ async def get_map_data_raw(year: Optional[int] = None):
             'sample_count': 1
         })
         
-    return output
+    # Sanitize output for JSON (Defense in Depth)
+    sanitized_output = []
+    for item in output:
+        clean_item = {}
+        for k, v in item.items():
+            if isinstance(v, float):
+                if np.isnan(v) or np.isinf(v):
+                    clean_item[k] = 0.0 if k != 'avg_wqi' else None
+                else:
+                    clean_item[k] = v
+            else:
+                clean_item[k] = v
+        sanitized_output.append(clean_item)
+                
+    return sanitized_output
 
 @app.get("/api/district-data")
 async def get_district_data(
@@ -579,7 +606,8 @@ async def get_district_data(
     paginated = df.iloc[offset:offset+limit]
     
     # Replace NaN with None for JSON
-    paginated_dict = paginated.where(pd.notnull(paginated), None).to_dict('records')
+    # Replace NaN and Infinity with None for JSON compliance
+    paginated_dict = paginated.replace([np.inf, -np.inf], np.nan).where(pd.notnull(paginated), None).to_dict('records')
     
     return {
         "limit": limit,
@@ -606,7 +634,9 @@ async def get_district_forecast(district: str):
     return ForecastResponse(
         district=district,
         state=str(state_name),
-        forecast_data=d_data.to_dict('records')
+        # Replace NaN with None (which is valid JSON null)
+        # Replace NaN/Inf with None
+        forecast_data=d_data.replace([np.inf, -np.inf], np.nan).where(pd.notnull(d_data), None).to_dict('records')
     )
 
 # ============================================================================
