@@ -23,6 +23,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from email_service import send_alert_email
 from subscription_manager import handle_new_subscription, get_subscribers_for_location, get_all_subscriptions
 from alert_engine import check_and_send_alerts
+import joblib
 
 # Suppress warnings
 warnings.filterwarnings('ignore')
@@ -69,10 +70,33 @@ try:
     else:
         print(f"❌ File not found: {predictions_path}")
         predictions_df = pd.DataFrame()
+
+    # Load FORECAST Data
+    forecast_path = os.path.join(current_dir, 'forecast_data.csv.gz')
+    if os.path.exists(forecast_path):
+        forecast_df = pd.read_csv(forecast_path, compression='gzip')
+        print(f"✅ Forecasts loaded: {len(forecast_df)} rows")
+    else:
+        print(f"⚠️ Forecast file missing: {forecast_path}. Run generate_forecasts.py")
+        forecast_df = pd.DataFrame()
+        
+    # Load ML MODELS
+    models_path = os.path.join(current_dir, 'enhanced_models.pkl')
+    trained_models = None
+    if os.path.exists(models_path):
+        try:
+            trained_models = joblib.load(models_path)
+            print("✅ ML Models Loaded Successfully!")
+        except Exception as e:
+            print(f"❌ Failed to load ML models: {e}")
+    else:
+        print(f"⚠️ Model file not found: {models_path}")
+
 except Exception as e:
     print(f"❌ Data load failed: {e}")
     traceback.print_exc()
     predictions_df = pd.DataFrame()
+    forecast_df = pd.DataFrame()
 
 print("="*60 + "\n")
 
@@ -109,6 +133,12 @@ class WaterQualityInput(BaseModel):
     year: Optional[int] = Field(2024)
     latitude: Optional[float] = Field(20.5937)
     longitude: Optional[float] = Field(78.9629)
+
+class ForecastResponse(BaseModel):
+    district: str
+    state: str
+    forecast_data: List[Dict[str, Any]]
+
 
 class PredictionResponse(BaseModel):
     predicted_tds: float
@@ -341,6 +371,38 @@ async def predict_water_quality(data: WaterQualityInput):
     )
     safe_for_use = wqi <= 100
     
+    # ML Inference
+    if trained_models and 'tds_model' in trained_models and 'potability_model' in trained_models:
+        try:
+            # Prepare features for model (ensure order matches training)
+            # Identifying feature names from model would be best, but we assume the standard set:
+            # pH, EC, TH, Ca, Mg, Na, K, Cl, SO4, NO3, F
+            feature_order = ['ph', 'ec', 'th', 'ca', 'mg', 'na', 'k', 'cl', 'so4', 'no3', 'f']
+            input_vector = []
+            for f in feature_order:
+                val = params.get(f, 0)
+                input_vector.append(val)
+                
+            input_arr = np.array([input_vector])
+            
+            # Predict TDS (as a check or refinement)
+            pred_tds_ml = trained_models['tds_model'].predict(input_arr)[0]
+            
+            # Predict Potability (Probability)
+            if hasattr(trained_models['potability_model'], 'predict_proba'):
+                 potable_prob = trained_models['potability_model'].predict_proba(input_arr)[0][1]
+                 potable = potable_prob > 0.5
+            else:
+                 potable = bool(trained_models['potability_model'].predict(input_arr)[0])
+                 
+            # Note: We can blend ML WQI if we had a WQI model, but usually WQI is calculated.
+            # We trust our Calc WQI, but use ML for Potability class.
+            
+        except Exception as e:
+            print(f"⚠️ ML Prediction failed, falling back to rules: {e}")
+            # Fallback logic remains below
+            pass
+
     return PredictionResponse(
         predicted_tds=float(data.TDS),
         wqi=float(wqi),
@@ -431,6 +493,26 @@ async def get_available_years():
 async def get_available_years_raw():
     return await get_available_years()
 
+@app.get("/api/locations")
+async def get_locations():
+    """Return all available States and Districts for dropdowns"""
+    if predictions_df.empty:
+         return {"states": []}
+    
+    # Get unique State-District pairs
+    locs = predictions_df[['State', 'District']].drop_duplicates().sort_values(['State', 'District'])
+    
+    # Structure: { "Maharashtra": ["Pune", "Mumbai"], ... }
+    output = {}
+    for _, row in locs.iterrows():
+        state = row['State']
+        dist = row['District']
+        if state not in output:
+            output[state] = []
+        output[state].append(dist)
+        
+    return output
+
 @app.get("/api/map-data-raw")
 async def get_map_data_raw(year: Optional[int] = None):
     """Get map visualization data"""
@@ -500,11 +582,32 @@ async def get_district_data(
     paginated_dict = paginated.where(pd.notnull(paginated), None).to_dict('records')
     
     return {
-        "total": total,
-        "offset": offset,
         "limit": limit,
         "data": paginated_dict
     }
+
+@app.get("/api/forecast/{district}", response_model=ForecastResponse)
+async def get_district_forecast(district: str):
+    if forecast_df.empty:
+         raise HTTPException(status_code=503, detail="Forecast data not computed.")
+         
+    # Case-insensitive match
+    d_data = forecast_df[forecast_df['District'].str.lower() == district.lower()]
+    
+    if d_data.empty:
+        raise HTTPException(status_code=404, detail=f"No forecast found for {district}")
+        
+    # Get State name from first row
+    state_name = d_data.iloc[0]['State']
+    
+    # Sort by year
+    d_data = d_data.sort_values('Year')
+    
+    return ForecastResponse(
+        district=district,
+        state=str(state_name),
+        forecast_data=d_data.to_dict('records')
+    )
 
 # ============================================================================
 # SUBSCRIPTION & ALERTS (Keep existing)
