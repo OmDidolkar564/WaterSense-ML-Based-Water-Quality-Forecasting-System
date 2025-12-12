@@ -69,6 +69,7 @@ export default function MapView({ data, showHeatmap }: MapViewProps) {
     // Initialize map
     if (!map.current) {
       map.current = L.map(mapContainer.current, {
+        preferCanvas: true, // CRITICAL: Use Canvas renderer for 10k+ points
         maxBounds: [
           [5, 65],
           [40, 100],
@@ -107,8 +108,6 @@ export default function MapView({ data, showHeatmap }: MapViewProps) {
         .map(item => [
           item.latitude,
           item.longitude,
-          // Intensity based on WQI. High WQI (bad) = High Intensity
-          // Normalize WQI roughly 0-200 to 0-1 range for intensity
           Math.min(item.avg_wqi / 150, 1.0)
         ]);
 
@@ -116,7 +115,7 @@ export default function MapView({ data, showHeatmap }: MapViewProps) {
       if ((L as any).heatLayer) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         heatLayer.current = (L as any).heatLayer(heatPoints, {
-          radius: 25,
+          radius: 20,
           blur: 15,
           maxZoom: 8,
           max: 1.0,
@@ -133,91 +132,41 @@ export default function MapView({ data, showHeatmap }: MapViewProps) {
       }
 
     } else {
-      // --- MARKER MODE ---
+      // --- MARKER MODE (OPTIMIZED) ---
       data.forEach((item) => {
         // Validate coordinates
-        if (!item.latitude || !item.longitude) {
-          return;
-        }
+        if (!item.latitude || !item.longitude || typeof item.latitude !== 'number') return;
+        if (!isWithinIndia(item.latitude, item.longitude)) return;
 
-        if (typeof item.latitude !== 'number' || typeof item.longitude !== 'number') {
-          return;
-        }
-
-        if (
-          item.latitude < -90 ||
-          item.latitude > 90 ||
-          item.longitude < -180 ||
-          item.longitude > 180
-        ) {
-          return;
-        }
-
-        // Check India bounds
-        if (!isWithinIndia(item.latitude, item.longitude)) {
-          return;
-        }
-
-        // Get color based on WQI
         const color = getColorByWQI(item.avg_wqi);
         const category = getWQICategory(item.avg_wqi);
 
-        // Create marker with larger size for visibility
-        const markerHtml = `
-          <div style="
-            background-color: ${color};
-            width: 24px;
-            height: 24px;
-            border-radius: 50%;
-            border: 3px solid white;
-            box-shadow: 0 3px 8px rgba(0,0,0,0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            cursor: pointer;
-            transition: transform 0.2s;
-          " onmouseover="this.style.transform='scale(1.3)'" onmouseout="this.style.transform='scale(1)'"></div>
-        `;
-
-        const icon = L.divIcon({
-          html: markerHtml,
-          iconSize: [24, 24],
-          className: 'custom-marker-wqi',
+        // Use CircleMarker for performance (renders on Canvas)
+        const marker = L.circleMarker([item.latitude, item.longitude], {
+          radius: 6,
+          fillColor: color,
+          color: '#fff',
+          weight: 1,
+          opacity: 1,
+          fillOpacity: 0.8
         });
 
-        const marker = L.marker([item.latitude, item.longitude], { icon })
-          .bindPopup(
-            `
-            <div style="font-family: 'Arial', sans-serif; font-size: 13px; min-width: 240px; padding: 8px;">
-              <div style="font-size: 16px; font-weight: bold; color: #333; margin-bottom: 8px; border-bottom: 2px solid ${color}; padding-bottom: 4px;">
+        marker.bindPopup(
+          `
+            <div style="font-family: 'Arial', sans-serif; font-size: 13px; min-width: 200px; padding: 5px;">
+              <div style="font-size: 15px; font-weight: bold; color: #333; margin-bottom: 5px; border-bottom: 2px solid ${color};">
                 ${item.district}
               </div>
-              <div style="margin: 6px 0;">
-                <strong style="color: #555;">State:</strong>
-                <span style="color: #333;">${item.state}</span>
-              </div>
-              <div style="margin: 6px 0;">
-                <strong style="color: #555;">WQI Score:</strong>
-                <span style="font-weight: bold; color: ${color}; font-size: 15px;">${item.avg_wqi.toFixed(2)}</span>
-              </div>
-              <div style="margin: 6px 0;">
-                <strong style="color: #555;">Quality:</strong>
-                <span style="color: ${color}; font-weight: bold; font-size: 14px;">${category}</span>
-              </div>
-              <div style="margin: 6px 0;">
-                <strong style="color: #555;">Risk:</strong>
-                <span style="color: #333;">${item.risk_category}</span>
-              </div>
-              <div style="margin: 6px 0; font-size: 11px; color: #888;">
-                📍 ${item.latitude.toFixed(4)}, ${item.longitude.toFixed(4)}
-              </div>
+              <div><strong style="color: #666;">State:</strong> ${item.state}</div>
+              <div><strong style="color: #666;">WQI:</strong> <b style="color:${color}">${item.avg_wqi.toFixed(1)}</b></div>
+              <div><strong style="color: #666;">Quality:</strong> ${category}</div>
+              <div style="margin-top:4px; font-size:10px; color:#999;">lat: ${item.latitude.toFixed(2)}, lng: ${item.longitude.toFixed(2)}</div>
             </div>
           `,
-            {
-              maxWidth: 280,
-              className: 'custom-popup',
-            }
-          );
+          {
+            className: 'custom-popup',
+          }
+        );
 
         if (markersGroup.current) {
           marker.addTo(markersGroup.current);
@@ -227,10 +176,8 @@ export default function MapView({ data, showHeatmap }: MapViewProps) {
 
     // Fit bounds if layers exist
     if (markersGroup.current && markersGroup.current.getLayers().length > 0) {
-      map.current?.fitBounds(markersGroup.current.getBounds(), { padding: [50, 50] });
-    } else if (showHeatmap) {
-      // Just set default view for heatmap
-      map.current?.setView([20.5937, 78.9629], 5);
+      // Don't auto-fit on every update if it's annoying, but helpful for initial load
+      // map.current?.fitBounds(markersGroup.current.getBounds(), { padding: [20, 20] });
     }
   }, [data, showHeatmap]);
 
