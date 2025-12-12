@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import {
     Container,
     Paper,
@@ -9,326 +9,265 @@ import {
     Grid,
     CircularProgress,
     Alert,
-    Table,
-    TableBody,
-    TableCell,
-    TableContainer,
-    TableHead,
-    TableRow,
     FormControl,
     InputLabel,
     Select,
     MenuItem,
-    Button,
 } from '@mui/material';
-import { Add, Timeline } from '@mui/icons-material';
+import { Timeline, TrendingUp } from '@mui/icons-material';
+import {
+    LineChart,
+    Line,
+    XAxis,
+    YAxis,
+    CartesianGrid,
+    Tooltip,
+    Legend,
+    ResponsiveContainer,
+    ReferenceLine
+} from 'recharts';
 
-interface ForecastData {
-    well_id: string;
-    parameter: string;
-    actual_2022: number;
-    predicted_2022: number;
-    difference: number;
-    percent_change: number;
-    abs_error: number;
-    abs_error_pct: number;
+interface ForecastItem {
+    Year: number;
+    WQI: number;
+    TDS: number;
+    pH: number;
+    NO3: number;
+    F: number;
+    Risk_Category: string;
 }
 
-interface SummaryStats {
-    [key: string]: {
-        actual_mean: number;
-        predicted_mean: number;
-        actual_std: number;
-        predicted_std: number;
-        actual_min: number;
-        actual_max: number;
-        mae: number;
-        rmse: number;
-        r2: number;
-        samples: number;
-    };
+interface ForecastResponse {
+    district: string;
+    state: string;
+    forecast_data: ForecastItem[];
+}
+
+interface Locations {
+    [state: string]: string[];
 }
 
 export default function ForecastPage() {
-    const [selectedParameter, setSelectedParameter] = useState('');
-    const [allData, setAllData] = useState<ForecastData[]>([]);
-    const [offset, setOffset] = useState(0);
-    const [hasMore, setHasMore] = useState(true);
-    const [loadingMore, setLoadingMore] = useState(false);
-    const [loading, setLoading] = useState(true);
-    const [totalRecords, setTotalRecords] = useState(0);
-    const [parameters, setParameters] = useState<string[]>([]);
-    const [summaryData, setSummaryData] = useState<SummaryStats | null>(null);
+    // Selectors
+    const [locations, setLocations] = useState<Locations>({});
+    const [selectedState, setSelectedState] = useState<string>('');
+    const [selectedDistrict, setSelectedDistrict] = useState<string>('');
+
+    // Data
+    const [forecastData, setForecastData] = useState<ForecastItem[]>([]);
+    const [loadingLocs, setLoadingLocs] = useState(true);
+    const [loadingData, setLoadingData] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    const LIMIT = 20;
-    const API_URL = '';
-
-    // Fetch summary stats
+    // Fetch Locations on Mount
     useEffect(() => {
-        fetchSummary();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        fetch('/api/locations')
+            .then(res => res.json())
+            .then(data => {
+                setLocations(data);
+                // Default selection to first reasonable option
+                const states = Object.keys(data);
+                if (states.length > 0) {
+                    const firstState = states[0];
+                    setSelectedState(firstState);
+                    if (data[firstState]?.length > 0) {
+                        setSelectedDistrict(data[firstState][0]);
+                    }
+                }
+                setLoadingLocs(false);
+            })
+            .catch(err => {
+                console.error("Failed to load locations", err);
+                setError("Failed to load location list.");
+                setLoadingLocs(false);
+            });
     }, []);
 
-    const fetchSummary = async () => {
-        try {
-            const res = await fetch(`${API_URL}/api/forecast/summary`);
-            if (!res.ok) throw new Error('Failed to fetch summary');
-            const data = await res.json();
-            setSummaryData(data);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } catch (err: any) {
-            console.error('Summary fetch error:', err);
-        }
-    };
-
-    // Fetch initial data
+    // Fetch Forecast when District Changes
     useEffect(() => {
-        fetchInitialData();
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedParameter]);
+        if (!selectedDistrict) return;
 
-    const fetchInitialData = async () => {
-        setLoading(true);
+        setLoadingData(true);
         setError(null);
-        try {
-            const url = selectedParameter
-                ? `${API_URL}/api/forecast?parameter=${selectedParameter}&offset=0&limit=${LIMIT}`
-                : `${API_URL}/api/forecast?offset=0&limit=${LIMIT}`;
+        
+        fetch(`/api/forecast/${selectedDistrict}`)
+            .then(async (res) => {
+                if (!res.ok) {
+                    const err = await res.json();
+                    throw new Error(err.detail || 'Failed to fetch forecast');
+                }
+                return res.json();
+            })
+            .then((data: ForecastResponse) => {
+                // Ensure years are sorted
+                const sorted = data.forecast_data.sort((a, b) => a.Year - b.Year); 
+                setForecastData(sorted);
+                setLoadingData(false);
+            })
+            .catch(err => {
+                console.error(err);
+                setError(err.message);
+                setLoadingData(false);
+                setForecastData([]);
+            });
 
-            const res = await fetch(url);
-            if (!res.ok) throw new Error('Failed to fetch data');
+    }, [selectedDistrict]);
 
-            const result = await res.json();
+    // Derived States for Dropdowns
+    const states = useMemo(() => Object.keys(locations).sort(), [locations]);
+    const districts = useMemo(() => {
+        return selectedState ? (locations[selectedState] || []).sort() : [];
+    }, [locations, selectedState]);
 
-            setAllData(result.data || []);
-            setTotalRecords(result.total_records || 0);
-            setHasMore(result.has_more || false);
-            setOffset(LIMIT);
-            setParameters(result.parameters || []);
-
-            if (!selectedParameter && result.parameters && result.parameters.length > 0) {
-                setSelectedParameter(result.parameters[0]);
-            }
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } catch (err: any) {
-            console.error('Fetch error:', err);
-            setError(err.message || 'Failed to load data.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    // Load more data
-    const loadMoreData = async () => {
-        setLoadingMore(true);
-        try {
-            const url = selectedParameter
-                ? `${API_URL}/api/forecast?parameter=${selectedParameter}&offset=${offset}&limit=${LIMIT}`
-                : `${API_URL}/api/forecast?offset=${offset}&limit=${LIMIT}`;
-
-            const res = await fetch(url);
-            if (!res.ok) throw new Error('Failed to load more');
-            const result = await res.json();
-
-            setAllData((prev) => [...prev, ...(result.data || [])]);
-            setHasMore(result.has_more || false);
-            setOffset((prev) => prev + LIMIT);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        } catch (err: any) {
-            console.error('Error loading more:', err);
-        } finally {
-            setLoadingMore(false);
-        }
-    };
-
-    const summary = summaryData?.[selectedParameter];
+    // Chart logic
+    const chartData = useMemo(() => {
+        return forecastData.map(d => ({
+            year: d.Year,
+            WQI: d.WQI,
+            TDS: d.TDS,
+            pH: d.pH,
+            NO3: d.NO3
+        }));
+    }, [forecastData]);
 
     return (
         <Container maxWidth="lg" sx={{ py: 4 }}>
             {/* Header */}
             <Box sx={{ mb: 4, textAlign: 'center' }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', mb: 1, gap: 2 }}>
-                    <Timeline sx={{ fontSize: 40, color: '#764ba2' }} />
+                    <TrendingUp sx={{ fontSize: 40, color: '#00695c' }} />
                     <Typography
                         variant="h3"
                         sx={{
                             fontWeight: 700,
-                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            background: 'linear-gradient(135deg, #00695c 0%, #004d40 100%)',
                             backgroundClip: 'text',
                             WebkitBackgroundClip: 'text',
                             WebkitTextFillColor: 'transparent',
                         }}
                     >
-                        Model Validation (2022)
+                        Future Forecasting (2025-2030)
                     </Typography>
                 </Box>
                 <Typography variant="subtitle1" sx={{ color: '#666' }}>
-                    Actual vs Predicted water quality parameters
+                    Predictive analysis using AI linear projection models on 2019-2023 data.
                 </Typography>
             </Box>
 
             {/* Error Alert */}
-            {error && (
-                <Alert severity="error" sx={{ mb: 3 }}>
-                    {error}
-                </Alert>
-            )}
+            {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
 
-            {/* Parameter Selector & Summary */}
-            <Paper sx={{ p: 3, mb: 3, borderRadius: '12px' }}>
-                <Grid container spacing={3} alignItems="center">
-                    <Grid item xs={12} md={3}>
-                        <FormControl fullWidth disabled={loading || parameters.length === 0}>
-                            <InputLabel>Select Parameter</InputLabel>
+            {/* Controls */}
+            <Paper sx={{ p: 3, mb: 4, borderRadius: '16px' }}>
+                <Grid container spacing={3}>
+                    <Grid item xs={12} md={4}>
+                        <FormControl fullWidth disabled={loadingLocs}>
+                            <InputLabel>All States</InputLabel>
                             <Select
-                                value={selectedParameter}
-                                onChange={(e) => setSelectedParameter(e.target.value)}
-                                label="Select Parameter"
+                                value={selectedState}
+                                label="Select State"
+                                onChange={(e) => {
+                                    setSelectedState(e.target.value);
+                                    // Reset district
+                                    const newDists = locations[e.target.value];
+                                    if (newDists?.length) setSelectedDistrict(newDists[0]);
+                                    else setSelectedDistrict('');
+                                }}
                             >
-                                {parameters.map((param) => (
-                                    <MenuItem key={param} value={param}>
-                                        {param}
-                                    </MenuItem>
-                                ))}
+                                {states.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
                             </Select>
                         </FormControl>
                     </Grid>
-
-                    {/* Summary Cards - ALL CONSTANT COLORS */}
-                    {summary && (
-                        <>
-                            <Grid item xs={12} sm={6} md={2}>
-                                <Box sx={{ textAlign: 'center' }}>
-                                    <Typography variant="caption" sx={{ color: '#555', fontWeight: 700 }}>
-                                        ACTUAL (Mean)
-                                    </Typography>
-                                    <Typography variant="h5" sx={{ fontWeight: 700, color: '#333' }}>
-                                        {summary.actual_mean.toFixed(2)}
-                                    </Typography>
-                                </Box>
-                            </Grid>
-
-                            <Grid item xs={12} sm={6} md={2}>
-                                <Box sx={{ textAlign: 'center' }}>
-                                    <Typography variant="caption" sx={{ color: '#555', fontWeight: 700 }}>
-                                        PREDICTED (Mean)
-                                    </Typography>
-                                    <Typography variant="h5" sx={{ fontWeight: 700, color: '#333' }}>
-                                        {summary.predicted_mean.toFixed(2)}
-                                    </Typography>
-                                </Box>
-                            </Grid>
-
-                            <Grid item xs={12} sm={6} md={2}>
-                                <Box sx={{ textAlign: 'center' }}>
-                                    <Typography variant="caption" sx={{ color: '#555', fontWeight: 700 }}>
-                                        MAE
-                                    </Typography>
-                                    <Typography variant="h5" sx={{ fontWeight: 700, color: '#333' }}>
-                                        {summary.mae.toFixed(2)}
-                                    </Typography>
-                                </Box>
-                            </Grid>
-
-                            <Grid item xs={12} sm={6} md={3}>
-                                <Box sx={{ textAlign: 'center' }}>
-                                    <Typography variant="caption" sx={{ color: '#555', fontWeight: 700 }}>
-                                        R² SCORE
-                                    </Typography>
-                                    <Typography variant="h5" sx={{ fontWeight: 700, color: '#333' }}>
-                                        {summary.r2.toFixed(4)}
-                                    </Typography>
-                                </Box>
-                            </Grid>
-                        </>
-                    )}
+                    <Grid item xs={12} md={4}>
+                        <FormControl fullWidth disabled={!selectedState || loadingLocs}>
+                            <InputLabel>District</InputLabel>
+                            <Select
+                                value={selectedDistrict}
+                                label="Select District"
+                                onChange={(e) => setSelectedDistrict(e.target.value)}
+                            >
+                                {districts.map(d => <MenuItem key={d} value={d}>{d}</MenuItem>)}
+                            </Select>
+                        </FormControl>
+                    </Grid>
+                    <Grid item xs={12} md={4} sx={{ display: 'flex', alignItems: 'center' }}>
+                        {loadingData && <CircularProgress size={24} sx={{ mr: 2 }} />}
+                        {selectedDistrict && !loadingData && (
+                            <Typography variant="body2" color="success.main">
+                                ✅ Forecast Loaded for {selectedDistrict}
+                            </Typography>
+                        )}
+                    </Grid>
                 </Grid>
             </Paper>
 
-            {/* Data Table */}
-            {loading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
-                    <CircularProgress />
-                </Box>
-            ) : allData.length === 0 ? (
-                <Alert severity="warning">
-                    No data available. Make sure backend is running.
-                </Alert>
-            ) : (
-                <>
-                    <TableContainer component={Paper} sx={{ borderRadius: '12px', mb: 3 }}>
-                        <Table>
-                            <TableHead sx={{ background: '#f5f5f5' }}>
-                                <TableRow>
-                                    <TableCell sx={{ fontWeight: 700 }}>ID</TableCell>
-                                    <TableCell sx={{ fontWeight: 700 }}>Parameter</TableCell>
-                                    <TableCell align="right" sx={{ fontWeight: 700 }}>
-                                        Actual
-                                    </TableCell>
-                                    <TableCell align="right" sx={{ fontWeight: 700 }}>
-                                        Predicted
-                                    </TableCell>
-                                    <TableCell align="right" sx={{ fontWeight: 700 }}>
-                                        Error
-                                    </TableCell>
-                                    <TableCell align="right" sx={{ fontWeight: 700 }}>
-                                        Error (%)
-                                    </TableCell>
-                                </TableRow>
-                            </TableHead>
-                            <TableBody>
-                                {allData.map((row, idx) => (
-                                    <TableRow key={idx} hover>
-                                        <TableCell sx={{ fontSize: '12px', color: '#333' }}>
-                                            {row.well_id}
-                                        </TableCell>
-                                        <TableCell sx={{ fontWeight: 600, color: '#333' }}>
-                                            {row.parameter}
-                                        </TableCell>
-                                        <TableCell align="right" sx={{ color: '#333' }}>
-                                            {row.actual_2022.toFixed(2)}
-                                        </TableCell>
-                                        <TableCell align="right" sx={{ color: '#333' }}>
-                                            {row.predicted_2022.toFixed(2)}
-                                        </TableCell>
-                                        <TableCell align="right" sx={{ fontWeight: 600, color: '#333' }}>
-                                            {row.difference.toFixed(2)}
-                                        </TableCell>
-                                        <TableCell align="right" sx={{ fontWeight: 600, color: '#333' }}>
-                                            {row.percent_change.toFixed(2)}%
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                    </TableContainer>
-
-                    {/* Load More Section */}
-                    <Box sx={{ textAlign: 'center' }}>
-                        <Typography variant="caption" sx={{ color: '#999', display: 'block', mb: 2 }}>
-                            Showing {allData.length} of {totalRecords.toLocaleString()} records
-                        </Typography>
-
-                        {hasMore && (
-                            <Button
-                                variant="contained"
-                                startIcon={loadingMore ? <CircularProgress size={20} /> : <Add />}
-                                onClick={loadMoreData}
-                                disabled={loadingMore}
-                                sx={{ textTransform: 'none' }}
-                            >
-                                {loadingMore ? 'Loading...' : 'Load More (20 rows)'}
-                            </Button>
-                        )}
-
-                        {!hasMore && allData.length > 0 && (
-                            <Typography variant="caption" sx={{ color: '#666', fontWeight: 600 }}>
-                                ✅ All records loaded
+            {/* Main Chart */}
+            {forecastData.length > 0 && (
+                <Grid container spacing={3}>
+                    {/* WQI Chart */}
+                    <Grid item xs={12}>
+                        <Paper sx={{ p: 3, borderRadius: '16px', height: 450 }}>
+                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: '#00695c' }}>
+                                Water Quality Index (WQI) Projection
                             </Typography>
-                        )}
-                    </Box>
-                </>
+                            <ResponsiveContainer width="100%" height="90%">
+                                <LineChart data={chartData}>
+                                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                                    <XAxis dataKey="year" />
+                                    <YAxis domain={[0, 'auto']} label={{ value: 'WQI', angle: -90, position: 'insideLeft' }} />
+                                    <Tooltip 
+                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                    />
+                                    <Legend />
+                                    <ReferenceLine x={2023} stroke="red" strokeDasharray="3 3" label="Forecast Start" />
+                                    <Line type="monotone" dataKey="WQI" stroke="#ff9800" strokeWidth={3} dot={{ r: 4 }} activeDot={{ r: 8 }} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </Paper>
+                    </Grid>
+
+                    {/* Parameters Chart */}
+                    <Grid item xs={12} md={6}>
+                        <Paper sx={{ p: 3, borderRadius: '16px', height: 400 }}>
+                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: '#1976d2' }}>
+                                Chemical Parameters (TDS, NO3)
+                            </Typography>
+                            <ResponsiveContainer width="100%" height="90%">
+                                <LineChart data={chartData}>
+                                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                                    <XAxis dataKey="year" />
+                                    <YAxis yAxisId="left" />
+                                    <YAxis yAxisId="right" orientation="right" />
+                                    <Tooltip />
+                                    <Legend />
+                                    <Line yAxisId="left" type="monotone" dataKey="TDS" stroke="#2196f3" strokeWidth={2} name="TDS (mg/L)" />
+                                    <Line yAxisId="right" type="monotone" dataKey="NO3" stroke="#f44336" strokeWidth={2} name="Nitrate (mg/L)" />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </Paper>
+                    </Grid>
+
+                    {/* pH Chart */}
+                    <Grid item xs={12} md={6}>
+                        <Paper sx={{ p: 3, borderRadius: '16px', height: 400 }}>
+                            <Typography variant="h6" sx={{ mb: 2, fontWeight: 600, color: '#7b1fa2' }}>
+                                pH Levels
+                            </Typography>
+                            <ResponsiveContainer width="100%" height="90%">
+                                <LineChart data={chartData}>
+                                    <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
+                                    <XAxis dataKey="year" />
+                                    <YAxis domain={[6, 9]} />
+                                    <Tooltip />
+                                    <Legend />
+                                    <ReferenceLine y={6.5} stroke="green" strokeDasharray="3 3" />
+                                    <ReferenceLine y={8.5} stroke="green" strokeDasharray="3 3" />
+                                    <Line type="monotone" dataKey="pH" stroke="#9c27b0" strokeWidth={3} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </Paper>
+                    </Grid>
+                </Grid>
             )}
         </Container>
     );

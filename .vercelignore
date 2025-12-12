@@ -1,0 +1,15 @@
+# Ignore the API folder (hosted on Hugging Face)
+api/
+backend/
+
+# Ignore large files
+*.pkl
+*.gz
+*.csv
+
+# Ignore local config
+.env
+.env.local
+.venv
+venv/
+__pycache__/

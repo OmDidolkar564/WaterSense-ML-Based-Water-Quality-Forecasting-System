@@ -12,6 +12,10 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
+# Explicitly copy critical data files to ensure they are present
+COPY enhanced_models.pkl .
+COPY forecast_data.csv.gz .
+
 # Copy the rest of the current directory contents into the container at /app
 COPY . .
 

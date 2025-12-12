@@ -19,11 +19,11 @@ build/
 hf_deployment_temp/
 
 # Large Files & Local DBs
-*.pkl
+# Large Files handled by LFS
+# *.pkl (Removed to allow LFS tracking)
 *.zip
 *.db
 *.sqlite3
-backend/enhanced_models.pkl
 
 # IDEs
 .vscode/
