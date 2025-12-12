@@ -521,11 +521,16 @@ async def get_district_data(
 
 @app.post("/api/subscribe")
 async def subscribe_user(request: SubscriptionRequest):
-    success, msg = add_subscription(request.email, request.location, request.type)
-    if not success:
-         print(f"Subscription failed: {msg}")
-         raise HTTPException(status_code=400, detail=msg)
-    return {"message": msg}
+    try:
+        success, msg = add_subscription(request.email, request.location, request.type)
+        if not success:
+             print(f"Subscription failed: {msg}")
+             raise HTTPException(status_code=400, detail=msg)
+        return {"message": msg}
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 @app.post("/api/trigger-alert")
 async def trigger_manual_alert(request: TriggerRequest):
