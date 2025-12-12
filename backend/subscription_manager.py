@@ -42,6 +42,7 @@ def add_subscription(email: str, location: str, sub_type: str = 'district') -> t
     Returns (Success, Message).
     """
     client = get_supabase_client()
+    print("DEBUG: add_subscription executing...")
     
     # Normalize inputs
     email = email.lower().strip()
